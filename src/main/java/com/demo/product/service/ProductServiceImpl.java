@@ -1,5 +1,8 @@
 package com.demo.product.service;
 
+import com.demo.product.dto.productfactory.ProductFactory;
+import com.demo.product.dto.productreq.ProductRequest;
+import com.demo.product.dto.productres.ProductResponse;
 import com.demo.product.entity.Product;
 import com.demo.product.repository.ProductRepository;
 import org.springframework.http.HttpStatus;
@@ -19,34 +22,40 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public List<Product> getAllProducts() {
-        return productRepository.findAll();
+    public List<ProductResponse> getAllProducts() {
+        return productRepository.findAll()
+                .stream()
+                .map(ProductFactory::toResponse)
+                .toList();
     }
 
     @Override
-    public Product getProductById(Long id) {
-        return productRepository.findById(id)
+    public ProductResponse getProductById(Long id) {
+        Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Product not found with id: " + id));
+        return ProductFactory.toResponse(product);
     }
 
     @Override
-    public Product createProduct(Product product) {
-        validateProduct(product);
-        return productRepository.save(product);
+    public ProductResponse createProduct(ProductRequest request) {
+        validateProduct(request);
+        Product product = ProductFactory.toEntity(request);
+        Product savedProduct = productRepository.save(product);
+        return ProductFactory.toResponse(savedProduct);
     }
 
     @Override
-    public Product updateProduct(Long id, Product productDetails) {
-        Product existingProduct = getProductById(id);
-        validateProduct(productDetails);
+    public ProductResponse updateProduct(Long id, ProductRequest request) {
+        Product existingProduct = productRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Product not found with id: " + id));
 
-        existingProduct.setName(productDetails.getName());
-        existingProduct.setDescription(productDetails.getDescription());
-        existingProduct.setPrice(productDetails.getPrice());
-        existingProduct.setQuantity(productDetails.getQuantity());
+        validateProduct(request);
+        ProductFactory.updateEntity(existingProduct, request);
 
-        return productRepository.save(existingProduct);
+        Product updatedProduct = productRepository.save(existingProduct);
+        return ProductFactory.toResponse(updatedProduct);
     }
 
     @Override
@@ -58,17 +67,17 @@ public class ProductServiceImpl implements ProductService {
         productRepository.deleteById(id);
     }
 
-    private void validateProduct(Product product) {
-        if (product == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product is required");
+    private void validateProduct(ProductRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product request is required");
         }
-        if (product.getName() == null || product.getName().isBlank()) {
+        if (request.getName() == null || request.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product name is required");
         }
-        if (product.getPrice() == null || product.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+        if (request.getPrice() == null || request.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price must be greater than 0");
         }
-        if (product.getQuantity() == null || product.getQuantity() < 0) {
+        if (request.getQuantity() == null || request.getQuantity() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quantity cannot be negative");
         }
     }
